@@ -15,15 +15,8 @@ def server_program(host, port, fos_ports=[0]):
         try:
             input=int(conn.recv(1024).decode())
             print('input:',input)
-            # laser_logs=[time.time()]
-            # for port_value in fos_ports:
-            #     ul.d_out(board_num, port.type, port_value) #switching FOS port
-            #     time.sleep(.005)#this is how I'm implementing a switching delay 
-            #     laser_logs+=[wavemeter.readWL()] #reading wavemeter
-            message="".join([str(datum)+"," for datum in laser_logs]).rstrip(',')+'\n'
+            message=''.join([f'{key}:{laser_logs[key]},' for key in laser_logs.keys()]).rstrip(',')+'\n'
             conn.send(message.encode())  # Send data back to the client
-            # print("data: ", data)
-            # print("message:", message)
         except: break
     conn.close()
     server_program(host, port, fos_ports=fos_ports)
@@ -44,11 +37,11 @@ def wavemeter_multiplexer(fos_ports):
     print("Reached loop")
     while True:
         try:
-            laser_logs_temp=[time.time()]
+            laser_logs_temp={'time':time.time()}
             for port_value in fos_ports:
                 ul.d_out(board_num, port.type, port_value) #switching FOS port
                 time.sleep(.005)#this is how I'm implementing a switching delay 
-                laser_logs_temp+=[wavemeter.readWL()] #reading wavemeter
+                laser_logs_temp[port_value+1]=wavemeter.readWL() #reading wavemeter
             laser_logs=laser_logs_temp
         except: break
     wavemeter.tn.close()
