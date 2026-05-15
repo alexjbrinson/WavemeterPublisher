@@ -12,19 +12,19 @@ from SinglePortViewer import SinglePortViewer
 import threading
 
 class MainGUI(QtWidgets.QMainWindow):
-  def __init__(self, wavemeter, watch_list=[], colorList=[], maxLength=1000):
+  def __init__(self, wavemeter, watch_list=[], colorList=[], maxLength=20000):
     super().__init__()
     self.cw=QtWidgets.QWidget(); self.setCentralWidget(self.cw) #create and set central widget
     self.verticalLayout = QtWidgets.QVBoxLayout(); self.cw.setLayout(self.verticalLayout) #create horizontal layout, add to central widget
     self.gridLayout=QtWidgets.QGridLayout(); self.verticalLayout.addLayout(self.gridLayout)
     if type(wavemeter) == list: self.wavemeter_list=wavemeter
     else: self.wavemeter_list=[wavemeter]
-    self.fos_port_list=[i for i in range(1,len(wavemeter.data.keys()))] #update for case of multiple wavemeters
+    self.fos_port_list=list(wavemeter.data.keys())[1:]#[i for i in range(1,len(wavemeter.data.keys()))] #update for case of multiple wavemeters
     self.data={port:{"Times":[],"Wavelengths":[]} for port in self.fos_port_list}
     self.watching={port:False for port in self.fos_port_list}
     for port in watch_list:
       self.watching[port]=True
-    self.colorList=colorList #make this a cmap
+    self.colorList=colorList #TODO: make this a cmap?
     self.maxLength=maxLength
     self.makePortViewers()
     self.timer = QtCore.QTimer()
@@ -79,7 +79,7 @@ class MainGUI(QtWidgets.QMainWindow):
     for wavemeter in self.wavemeter_list:
       self.readout.update(wavemeter.data)
     for fos_port in self.fos_port_list:
-      if self.readout[fos_port]==0: continue #0 indicates a failed reading, but blows up as a frequency
+      if self.readout[fos_port]==0: continue#print("huh?", self.readout);continue #0 indicates a failed reading, but blows up as a frequency
       if len(self.data[fos_port]['Times'])>0 and self.readout["time"]==self.data[fos_port]['Times'][-1]:continue #ignore duplicate reading
       self.data[fos_port]['Times']+=[self.readout["time"]]
       self.data[fos_port]['Wavelengths']+=[self.readout[fos_port ]]
@@ -113,17 +113,53 @@ class MainGUI(QtWidgets.QMainWindow):
     self.unviewedPorts+=[port]
     self.makePortViewers()
     return
-    
-if __name__ == '__main__':
+
+  def safeExit(self):
+    for wm in self.wavemeter_list:
+      wm.stop()
+
+def main_old():
+  print("Starting GUI")
   try:
-    wmc=wavemeterClient("10.54.6.173", 5000)
+    # wmc=wavemeterClient("10.54.6.173", 5000)
+    wmc=wavemeterClient("10.54.6.156", 5000)
     wmc.start(); print("client running")
   except:
     wmc=dummyWavemeter(num_ports=8)
   print(wmc.data)
   app = QtWidgets.QApplication(sys.argv)
-  #app.aboutToQuit.connect(MyApp.safeExit)
-  window = MainGUI(wmc, watch_list=[*range(1,9)], colorList=4*['blue', 'red'])
+  window = MainGUI(wmc, watch_list=[*range(1,9)], colorList=4*['blue','orange','red','magenta'])
+  app.aboutToQuit.connect(window.safeExit)
   window.show()
   sys.exit(app.exec())
   wmc.stop()
+
+def main():
+    print("GUI main() entered")
+
+    try:
+        wmc = wavemeterClient("10.54.6.173", 5000)
+        wmc.start()
+        print("client running")
+    except Exception as e:
+        print("Client failed:", e)
+        wmc = dummyWavemeter(num_ports=8)
+
+    print("Creating QApplication")
+    app = QtWidgets.QApplication(sys.argv)
+
+    print("Creating window")
+    window = MainGUI(
+        wmc,
+        watch_list=[*range(1,9)],
+        colorList=4*['blue','orange','red','magenta']
+    )
+
+    print("Showing window")
+    window.show()
+
+    print("Entering event loop")
+    sys.exit(app.exec())
+    
+if __name__ == '__main__':
+  main_old()

@@ -6,27 +6,45 @@ import time
 import matplotlib.pyplot as plt
 import socket
 import threading
+import wmPlotterGUI as GUI
+
+laser_lock = threading.Lock()
+def handle_client(conn, address):
+  print(f"Connection from: {address}")
+  try:
+    # data = conn.recv(1024)
+    # if data.decode().strip() == "ping":
+      # conn.send(b"ready")
+      # return
+    while True:
+      data = conn.recv(1024)
+      if not data:
+          break
+      #data.decode()  # Eventually, actually cater to client's request
+      with laser_lock:
+        message=''.join([f'{key}:{laser_logs[key]},' for key in laser_logs.keys()]).rstrip(',') + '\n'
+      conn.send(message.encode())
+  except Exception as e:
+    print(f"Client {address} error: {e}")
+  finally:
+    conn.close()
+    print(f"Connection closed: {address}")
 
 def server_program(host, port, fos_ports=[0]):
     print(f"Server listening on {host}:{port}")
-    conn, address = server_socket.accept()  # Accept a new connection
-    print(f"Connection from: {address}")
     while True:
-        try:
-            input=int(conn.recv(1024).decode())
-            print('input:',input)
-            message=''.join([f'{key}:{laser_logs[key]},' for key in laser_logs.keys()]).rstrip(',')+'\n'
-            conn.send(message.encode())  # Send data back to the client
-        except: break
-    conn.close()
-    server_program(host, port, fos_ports=fos_ports)
+        conn, address = server_socket.accept()  # Accept a new connection
+        print(f"Connection from: {address}")
+        client_thread = threading.Thread(target=handle_client, args=(conn, address), daemon=True)
+        client_thread.start()  # Handle the client connection in a new thread
 
 def wavemeter_multiplexer(fos_ports):
     global laser_logs
+    print('fos_ports:',fos_ports)
     #wavemeter instantiation
     wavemeter=pyBristolSCPI()
     #switcher instantiation:
-    board_num=0
+    board_num=0 
     digital_props=DigitalProps(board_num)
     # Find the first port that supports output, defaulting to None if one is not found.
     port = next(
@@ -36,18 +54,17 @@ def wavemeter_multiplexer(fos_ports):
     if port.is_port_configurable: ul.d_config_port(board_num, port.type, DigitalIODirection.OUT)
     print("Reached loop")
     while True:
-        try:
-            laser_logs_temp={'time':time.time()}
-            for port_value in fos_ports:
-                ul.d_out(board_num, port.type, port_value) #switching FOS port
-                time.sleep(.005)#this is how I'm implementing a switching delay 
-                laser_logs_temp[port_value+1]=wavemeter.readWL() #reading wavemeter
-            laser_logs=laser_logs_temp
-        except: break
+        laser_logs_temp={'time':time.time()}
+        for port_value in fos_ports: 
+            ul.d_out(board_num, port.type, port_value) #switching FOS port
+            time.sleep(.005)#(0.025)#this is how I'm implementing a switching delay 
+            laser_logs_temp[port_value+1]=wavemeter.readWL() #reading wavemeter
+        with laser_lock: laser_logs = laser_logs_temp
+        # print(laser_logs)
     wavemeter.tn.close()
 
 if __name__ == '__main__':
-    fos_ports=[0,1]
+    fos_ports=[0]#,1,2,3]#0
      # Get the hostname (or use '0.0.0.0' to listen on all available interfaces)
     host = '0.0.0.0'#socket.gethostname()  
     port = 5000  # Arbitrary non-privileged port

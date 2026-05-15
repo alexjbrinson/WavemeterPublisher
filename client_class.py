@@ -37,28 +37,42 @@ class wavemeterClient():
         # return(self.data)
 
     def continuous_readout(self):
-        while self.reading: self.make_query()
+      while self.reading: self.make_query()
     def start(self):
-        self.reading=True
-        self.make_query()
-        self.readout_thread=threading.Thread(target=self.continuous_readout)
-        self.readout_thread.start()
+      self.reading=True
+      self.make_query()
+      self.readout_thread=threading.Thread(target=self.continuous_readout)
+      self.readout_thread.start()
     def stop(self):
-        self.reading=False
-        self.readout_thread.join()
-        self.data={}
+      self.reading=False
+      self.readout_thread.join()
+      self.data={}
 
 class dummyWavemeter():
   def __init__(self, num_ports=1):
     self.num_ports=num_ports
-    self.thread=threading.Thread(target=self.dummyUpdater)
-    self.thread.start()
-  def dummyUpdater(self):
-    while True:
-      self.data={"time":time.time()}
-      for key in range(1,self.num_ports+1):
-        self.data[key] = -1
+    self.start()
+
+  def make_query(self):
+    self.data={"time":time.time()}
+    for key in range(1,self.num_ports+1):
+      self.data[key] = -1
+
+  def continuous_readout(self):
+    while self.reading:
+      self.make_query()
       time.sleep(.03)
+
+  def start(self):
+      self.reading=True
+      self.make_query()
+      self.readout_thread=threading.Thread(target=self.continuous_readout)
+      self.readout_thread.start()
+      
+  def stop(self):
+      self.reading=False
+      self.readout_thread.join()
+      self.data={}
         
 
 if __name__ == '__main__':
