@@ -42,7 +42,7 @@ class SinglePortViewer(QtWidgets.QWidget):
     self.label=label
     self.maxLength=maxLength
     self.paused=False
-    self.logging=False
+    self.logging=False; self.logIndex=1
 
     '''Creating timeStreamPlot widgets on left side of GUI'''
     curve1Kwargs={'pen':color, 'symbolBrush':color, 'symbolPen':None, 'symbolSize':2}
@@ -114,8 +114,13 @@ class SinglePortViewer(QtWidgets.QWidget):
 
   def toggleLogging(self):
     self.logging = not self.logging
-    if self.logging: self.logButton.setStyleSheet("QPushButton {background:Green}")
-    else: self.logButton.setStyleSheet("QPushButton {color: Black; }")
+    if self.logging: 
+      self.logButton.setStyleSheet("QPushButton {background:Green}")
+      self.logFile=open(f"Channel_{self.fos_port}_logFile{self.logIndex}.csv","w")
+    else: 
+      self.logButton.setStyleSheet("QPushButton {color: Black; }")
+      self.logFile.close()
+      self.logIndex+=1
 
   def updatePlot(self):
     if self.paused: return
@@ -124,7 +129,7 @@ class SinglePortViewer(QtWidgets.QWidget):
       self.viewList[0].autoRange(padding=0)
       self.viewList[1].setYRange(299792.458/np.max(self.wl), 299792.458/np.min(self.wl),padding=0)
     else:
-      hist, edges= np.histogram(self.wl,bins=self.maxLength//10)
+      hist, edges= np.histogram(self.wl,bins=self.maxLength//20)#//10
       edges=299792.458/edges
       # print(hist, edges)
       self.yCurve.setData(x=(edges[:-1]+edges[1:])/2, y=hist)
@@ -133,7 +138,9 @@ class SinglePortViewer(QtWidgets.QWidget):
 
 
   def addData(self, time, measurement):
-    if self.logging: print(f'time: {time}; measurement: {measurement}')# temporary functionality until I implement file browser
+    if self.logging: 
+      # print(f'time: {time}; measurement: {measurement}')# temporary functionality until I implement file browser
+      self.logFile.write(f'{time}, {measurement}\n'); self.logFile.flush()
     self.x+=[time]; self.wl+=[measurement]
     if len(self.x)>self.maxLength: self.x.pop(0); self.wl.pop(0)
     self.readoutBox.setText(f'{measurement} nm')

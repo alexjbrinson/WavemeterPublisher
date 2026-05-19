@@ -38,9 +38,9 @@ class DAQViewer(QtWidgets.QMainWindow):
     self.lastTime=time.time()
     self.wmTimer.start(1)
 
-    # self.camTimer = QtCore.QTimer()
-    # self.camTimer.timeout.connect(self.updateCam)
-    # self.camTimer.start(1)
+    self.camTimer = QtCore.QTimer()
+    self.camTimer.timeout.connect(self.updateCam)
+    self.camTimer.start(50)
 
   def updateWM(self):
     self.readout={}
@@ -58,18 +58,21 @@ class DAQViewer(QtWidgets.QMainWindow):
         self.portViewer.addData(self.readout["time"], self.readout[fos_port])
         self.currentTime, self.currentFrequency = self.readout["time"], self.readout[fos_port]
       tt=time.time()
-      print('lag:',tt-self.lastTime)
+      # print('lag:',tt-self.lastTime)
       self.lastTime=tt
+
   def updateCam(self):
     self.frame=self.camera.get_latest()
     if not (self.frame is None): 
       self.cameraViewer.update(self.frame)
       self.currentSignal=np.sum(self.frame)
-      self.histogrammer.update(self.currentFrequency, self.currentSignal)
+      if self.currentFrequency:
+        self.histogrammer.update(299792.458/self.currentFrequency, self.currentSignal)
 
   def safeExit(self):
     for wm in self.wavemeter_list:
       wm.stop()
+    self.histogrammer.exit()
 
 
 if __name__ == '__main__':

@@ -79,6 +79,7 @@ class MainGUI(QtWidgets.QMainWindow):
     for wavemeter in self.wavemeter_list:
       self.readout.update(wavemeter.data)
     for fos_port in self.fos_port_list:
+      if fos_port not in self.readout.keys(): continue
       if self.readout[fos_port]==0: continue#print("huh?", self.readout);continue #0 indicates a failed reading, but blows up as a frequency
       if len(self.data[fos_port]['Times'])>0 and self.readout["time"]==self.data[fos_port]['Times'][-1]:continue #ignore duplicate reading
       self.data[fos_port]['Times']+=[self.readout["time"]]

@@ -14,24 +14,28 @@ class wavemeterClient():
         self.data = {}
 
     def make_query(self):
+        new_data={}
         dt=0
         t0=time.perf_counter()
         # client_socket.send(message.encode())  # Send the message
-        request='0'.encode()
+        request='GET'.encode()
         self.client_socket.send(request);
         self.message=self.leftover
         while "\n" not in self.message:
             packet=self.client_socket.recv(4).decode()
             self.message+=packet
-        self.message,self.leftover = self.message.split('\n')
+        self.message,self.leftover = self.message.split('\n',1)
         self.message=self.message.split(",")
         for kvp in self.message:
             key,value = kvp.split(":")
             # self.data[key]=value
-            if key=="time": self.data[key]=float(value)
-            else: self.data[int(key)]=float(value)
-
-        self.lastTimeStamp=self.data["time"]
+            if key=="time": new_data[key]=float(value)
+            else: new_data[int(key)]=float(value)
+            # if key=="time": self.data[key]=float(value)
+            # else: self.data[int(key)]=float(value)
+        self.lastTimeStamp=new_data["time"]
+        # self.lastTimeStamp=self.data["time"]
+        self.data = new_data
         # dt+=time.perf_counter()-t0
         # print("time elapsed:", dt)
         # return(self.data)
@@ -80,11 +84,12 @@ if __name__ == '__main__':
     import matplotlib.pyplot as plt
     import pyqtgraph as pg
     from pyqtgraph.Qt import QtCore
-    wmc=wavemeterClient("10.54.6.173", 5000)
+    # wmc=wavemeterClient("10.54.6.173", 5000)
+    wmc=wavemeterClient("10.54.6.156", 5000)
     wmc.start(); print("client running")
     for i in range(100):
         print(wmc.data)
-        print(wmc.data[2])
+        # print(wmc.data[2])
         time.sleep(0.01)
     # wmc.stop()
     # print("this", wmc.data)
