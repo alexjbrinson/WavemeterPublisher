@@ -8,7 +8,7 @@ from urllib.request import urlopen
 import time
 import os
 from client_class import wavemeterClient, dummyWavemeter
-from SinglePortViewer import SinglePortViewer
+from SinglePortViewer2 import SinglePortViewer
 import threading
 
 class MainGUI(QtWidgets.QMainWindow):
@@ -26,12 +26,12 @@ class MainGUI(QtWidgets.QMainWindow):
       self.watching[port]=True
     self.colorList=colorList #TODO: make this a cmap?
     self.maxLength=maxLength
-    while wavemeter.config=={}: wavemeter.get_config() #TODO: see why this ever fails
+    # while wavemeter.config=={}: wavemeter.get_config() #TODO: see why this ever fails
     self.last_configs = {port: wavemeter.config[port]['last_config'] for port in self.fos_port_list}
     self.makePortViewers()
-    self.configTimer = QtCore.QTimer()
-    self.configTimer.timeout.connect(self.updateConfigs)
-    self.configTimer.start(5000)
+    # self.configTimer = QtCore.QTimer()
+    # self.configTimer.timeout.connect(self.updateConfigs)
+    # self.configTimer.start(5000)
     self.timer = QtCore.QTimer()
     self.timer.timeout.connect(self.update)
     self.timer.start(33)

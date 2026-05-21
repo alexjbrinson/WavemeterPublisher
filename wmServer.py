@@ -1,3 +1,4 @@
+import numpy as np
 from dataclasses import dataclass, field
 from mcculw import ul
 from mcculw.enums import DigitalIODirection, ULRange, BoardInfo, DigitalIODirection, DigitalPortType
@@ -5,6 +6,8 @@ from Bristol.pyBristolSCPI import pyBristolSCPI
 from Bristol.digital import DigitalProps, PortInfo
 # from Bristol.PID.daq import DAQ as PID_DAQ
 import time, socket, threading, json
+
+# import wmPlotterGUI as wmpg #for quicker testing
 
 @dataclass
 class PIDState:
@@ -42,6 +45,9 @@ class PIDState:
     if self.ki!=0: self.integral=(desired_pid_output-self.kp*error)/self.ki
     else:          self.integral=0
 
+  def to_dict(self):
+    return {"kp":self.kp, "kd":self.kd, "ki":self.ki, "setpoint":self.setpoint, "integral":self.integral}
+
 @dataclass
 class WavePort:
   channel         :int
@@ -52,14 +58,18 @@ class WavePort:
   vHigh           :float    =  5
   gain            :float    =  10
   offset          :float    =  0
+  latest_time     :float    = None
   latest_reading  :float    =  0
   latest_error    :float    =  0
   latest_output   :float    =  0
+  last_config     :float    =  field(default_factory=time.time)
   def updateParams(self, **kwargs):
+    changed=False
     for key, value in kwargs.items():
-      if hasattr(self.pid, key): setattr(self.pid, key, value)
-      elif hasattr(self, key): setattr(self, key, value)
+      if hasattr(self.pid, key): setattr(self.pid, key, value); changed=True
+      elif hasattr(self, key): setattr(self, key, value); changed=True
       else: raise AttributeError(f"Unknown WavePort parameter: {key}")
+    if changed: self.last_config = time.time()
 
   def getParam(self, key):
     if hasattr(self.pid, key): return(getattr(self.pid, key))
@@ -70,14 +80,35 @@ class WavePort:
       print('must enable channel read before activating channel PID'); return(False)
     # now = time.perf_counter(); if now-self.pid.previous_time>5: self.pid.reset()
     self.pid.reset(measurement=self.latest_reading, current_voltage=self.latest_output, gain=self.gain, offset=self.offset); self.active_pid=True
+    self.last_config=time.time()
     return(True)
-  def disablePID(self): self.active_pid=False
+  def disablePID(self): self.active_pid=False; self.last_config=time.time()
   def clamp(self, value):    return max(self.vLow, min(self.vHigh, value))
   def wavelength_to_voltage(self, pid_output): return(self.gain*pid_output+self.offset)
   def update_pid(self, measurement):
     error, pid_output = self.pid.update(measurement)
     voltage=self.clamp(self.wavelength_to_voltage(pid_output))
     return(error, voltage)
+  def config_dict(self):
+    cd={"channel"         :self.channel,        
+        "active_read"     :self.active_read,    
+        "active_pid"      :self.active_pid,     
+        "pid"             :self.pid.to_dict(),            
+        "vLow"            :self.vLow,           
+        "vHigh"           :self.vHigh,          
+        "gain"            :self.gain,           
+        "offset"          :self.offset,
+        "last_config"     :self.last_config}
+        # "latest_reading"  :self.latest_reading, 
+        # "latest_error"    :self.latest_error,   
+        # "latest_output"   :self.latest_output}
+    return(cd)
+  def telemetry_dict(self):
+    td={"latest_time"     :self.latest_time,
+        "latest_reading"  :self.latest_reading, 
+        "latest_error"    :self.latest_error,   
+        "latest_output"   :self.latest_output}
+    return(td)
 
 class AppState:
   mlc_map = {0:(0,4),
@@ -107,9 +138,16 @@ class AppState:
     for ch, sp in defaults.items():
       if ch in self.wavePorts:
         self.wavePorts[ch].pid.setpoint=sp
+  def config_dict(self):
+    with self.lock:
+      return {"config": {ch: wp.config_dict() for ch, wp in self.wavePorts.items()}}
+  def telemetry_dict(self):
+    with self.lock:
+      return {"telemetry": {ch: wp.telemetry_dict() for ch, wp in self.wavePorts.items()}}
+  def total_dict(self):
+    return(self.telemetry_dict()|self.config_dict())
   def addChannel(self, ch):pass#TODO
   def removeChannel(self, ch):pass#TODO
-  def set_setPoint(self, ch):pass#TODO: WavePorts objects currently don't do anything to pid_engine
 
   def get_snapshot(self):
     with self.lock:
@@ -147,6 +185,11 @@ class WavemeterMultiplexer:
 
   def run(self):
     print("Wavemeter thread started")
+    then=time.time()
+    self.counter=0
+    self.maxLag=0
+    start = then
+    sleepTime=25#ms
     while self.state.running:
       try:
         with self.state.lock: 
@@ -156,22 +199,28 @@ class WavemeterMultiplexer:
             # print(f"switching to port {ch}")
             ul.d_out(self.fos_board_num, self.port.type, ch) #switching FOS port
             if (len(active_channels)>1) or (len(self.lastActiveChannels)>1): 
-              time.sleep(.025)#this is how I'm implementing a switching delay
-            readout=self.wavemeter.readWL() #reading wavemeter
+              time.sleep(0.001*sleepTime)#(.025)#this is how I'm implementing a switching delay
+              measures=[]
+              for _ in range(1):
+                measures+=[self.wavemeter.readWL()] #reading wavemeter
+              readout=np.median(measures)
+            else: readout = self.wavemeter.readWL() #reading wavemeter
             if wp.active_pid:
               error, voltage = wp.update_pid(readout)
               self.set_output_voltage(voltage, ch)
               # print(f"channel {ch}; error:{error}; voltage:{voltage}")
             else:
-              error = readout-wp.pid.setpoint
+              error = wp.pid.setpoint-readout
               voltage=wp.latest_output
             # if ch==5: print(ch, readout, error, voltage)
             with self.state.lock:
+              wp.latest_time = time.time()
               wp.latest_reading=readout
               wp.latest_error=error
               wp.latest_output = voltage
         self.lastActiveChannels = active_channels
-        # now=time.time(); print("dt=",now-then); then=now
+        now=time.time(); dt=now-then; then=now; self.counter+=1
+        # if now-start>1: self.maxLag=max(dt, self.maxLag); print(self.counter,f"current lag = {dt} max lag = {self.maxLag}"); 
         # print(laser_logs)
       except Exception as e:
         if not self.state.running: break #exceptions are fine if app is in process of shutting down
@@ -200,14 +249,38 @@ class SocketServer:
           data = conn.recv(1024)
           if not data:
             break
-          command = data.decode().strip()  # Eventually, actually cater to client's request
+          message = json.loads(data.decode())
+          command = message.get("cmd")
+          # command = data.decode().strip()  # Eventually, actually cater to client's request
           # print("command:", command)
           if command == "GET":
-            snapshot=self.state.get_snapshot()
-            laser_logs=snapshot
-            # message = json.dumps(snapshot)
-            message=''.join([f'{key}:{laser_logs[key]},' for key in laser_logs.keys()]).rstrip(',') + '\n'
+            t0=time.perf_counter()
+            laser_logs=self.state.get_snapshot()
+            # message = (json.dumps({"type":"telemetry", "data":self.state.telemetry_dict()})+'\n')#self.state.__dict__})
+            message = (json.dumps({"type":"total", "data":self.state.total_dict()})+'\n')#self.state.__dict__})
+            # message=''.join([f'{key}:{laser_logs[key]},' for key in laser_logs.keys()]).rstrip(',') + '\n'
             conn.sendall(message.encode())
+            t1=time.perf_counter()
+            # print(t1-t0)
+          elif command == "CONFIG":
+            print("config request received!")
+            t0=time.perf_counter()
+            message = (json.dumps({"type":"config", "data":self.state.config_dict()})+'\n')#self.state.__dict__})
+            # message=''.join([f'{key}:{laser_logs[key]},' for key in laser_logs.keys()]).rstrip(',') + '\n'
+            conn.sendall(message.encode())
+            t1=time.perf_counter()
+            print(t1-t0)
+          elif command == "SET":
+            try:
+              ch    = message["channel"]
+              with self.state.lock:
+                  wp = self.state.wavePorts[ch]
+                  wp.updateParams(**message["change"])
+                  print("Done")
+                  # conn.sendall(b'{"status":"ok"}\n')
+            except Exception as ee:
+              print(ee)
+              # conn.sendall(b'{"error":"Parameter assignment failed.'+ee.encode()+b'"}\n')
           else:
             conn.sendall(b'{"error":"unknown command"}')
         except (ConnectionResetError, BrokenPipeError):
@@ -241,7 +314,7 @@ if __name__ == '__main__':
   state = AppState()
   wm = WavemeterMultiplexer(state)
   wm_thread=threading.Thread(target=wm.run, daemon=True)
-  server=SocketServer(state)
+  server=SocketServer(state, port=5000)
   server_thread=threading.Thread(target=server.run, daemon=True)
   state.running=True
   wm_thread.start()
@@ -249,7 +322,11 @@ if __name__ == '__main__':
   for i in range(2):
     print(i)
     time.sleep(1)
+  # guiThread=threading.Thread(target=wmpg.main, daemon=True)
+
+  # guiThread.start()
   toStop = input('enter X to stop')
   state.running=False
+  
   wm.close()
   server.close()

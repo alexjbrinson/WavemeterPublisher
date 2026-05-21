@@ -69,7 +69,8 @@ class SinglePortViewer(QtWidgets.QWidget):
     self.lowerVerticalLayout.addWidget(pid_button)
     self.widgets["read"]= read_button
     self.widgets["pid"] = pid_button
-    self.lastUpdates={}
+    read_button.clicked.connect(lambda checked: self.toggleChannelRead())
+    pid_button.clicked.connect( lambda checked: self.toggleChannelPID())
     self.gridLayout=QtWidgets.QGridLayout(); self.lowerVerticalLayout.addLayout(self.gridLayout)
     for row, param in enumerate(self.lEditParams, start=0):
       self.gridLayout.addWidget(QtWidgets.QLabel(param), row, 0)
@@ -79,19 +80,46 @@ class SinglePortViewer(QtWidgets.QWidget):
       lEdit.returnPressed.connect(lambda param=param: self.adjustPID(param))
     self.updateGUIConfig()
 
+  def toggleChannelRead(self):
+    oldVal=self.wavemeterClient.config[self.fos_port]["active_read"]
+    newVal=not oldVal
+    self.wavemeterClient.request_change(self.fos_port-1, **{"active_read":newVal})
+    if newVal:
+      self.widgets["read"].setStyleSheet("background-color: green")
+    else: 
+      self.widgets["read"].setStyleSheet("background-color: white")
+      self.widgets["pid"].setStyleSheet("background-color: white")
+    self.widgets["pid"].setEnabled(newVal)
+    self.updateGUIConfig()
+  
+  def toggleChannelPID(self):
+    button=self.widgets["pid"]
+    oldVal=self.wavemeterClient.config[self.fos_port]["active_pid"]
+    newVal=not oldVal
+    self.wavemeterClient.request_change(self.fos_port-1, **{"active_pid":newVal})
+    if newVal:
+      button.setStyleSheet("background-color: green")
+    else: 
+      button.setStyleSheet("background-color: white")
+    self.updateGUIConfig()
+
   def adjustPID(self, param):
+    wp=self.wavemeterClient.config[self.fos_port]
     text=self.widgets[param].text()
     print(f"attemting to adjust {param} to {text}")
-    oldVal=self.wavemeterClient.config[self.fos_port]
+    try:    oldVal = wp[param]
+    except: oldVal = wp["pid"][param]
     try:
       newVal = float(text)
+      self.wavemeterClient.request_change(self.fos_port-1, **{param:newVal})
     except:
+      newVal=oldVal
       print('error. Please provide a float.')
-    self.wavemeterClient.request_change(self.fos_port, **{param:newVal})
     self.updateGUIConfig()
 
   def updateGUIConfig(self):
-    config=self.wavemeterClient.config; print("\nconfig:", config)
+    time.sleep(.01)#For now, this seems like a way to allow config to update before rendering gui changes
+    config=self.wavemeterClient.config; #print("\nconfig:", config)
     wp = config[self.fos_port]
     for parm in self.pButtonParams:
       button=self.widgets[parm]

@@ -19,7 +19,6 @@ class wavemeterClient():
 
     def make_query(self):
         new_data={}
-        new_config={}
         dt=0
         t0=time.perf_counter()
         command = {"cmd":"GET"}
@@ -31,15 +30,14 @@ class wavemeterClient():
             received+=packet
         received, leftover = received.split('\n',1)
         message=json.loads(received)
-        if message['type']!='total':return
+        if message['type']!='telemetry':return
         messData=message["data"]
-        for ch, wp in messData["telemetry"].items():new_data[int(ch)+1] = wp
-        for ch, wp in messData["config"].items():new_config[int(ch)+1] = wp
+        for ch, wp in messData["telemetry"].items():
           # if wp["active_read"]:
-          
-          # tt = wp["latest_time"]
-          # wl = wp["latest_reading"]
-          # if tt is None or wl==0:continue
+          new_data[int(ch)+1] = wp
+          tt = wp["latest_time"]
+          wl = wp["latest_reading"]
+          if tt is None or wl==0:continue
           # self.buffers[int(ch)+1].append((tt,wl))
             # latest=wp['latest_time']
             # if latest:
@@ -59,7 +57,6 @@ class wavemeterClient():
         with self.socket_lock:
            self.leftover=leftover
            self.data = new_data
-           self.config=new_config
         dt+=time.perf_counter()-t0
         # print("time elapsed:", dt)
         # return(self.data)
