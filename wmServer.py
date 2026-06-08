@@ -131,8 +131,8 @@ class AppState:
               1:760,
               2:935,
               3:780,
-              4:0,
-              5:787.62484,
+              4:787.62484,
+              5:0,
               6:0,
               7:0}
     for ch, sp in defaults.items():
@@ -146,8 +146,6 @@ class AppState:
       return {"telemetry": {ch: wp.telemetry_dict() for ch, wp in self.wavePorts.items()}}
   def total_dict(self):
     return(self.telemetry_dict()|self.config_dict())
-  def addChannel(self, ch):pass#TODO
-  def removeChannel(self, ch):pass#TODO
 
   def get_snapshot(self):
     with self.lock:
@@ -157,7 +155,7 @@ class AppState:
       return output
     
 class WavemeterMultiplexer:
-  def __init__(self, state:AppState):#, fos_ports:list):
+  def __init__(self, state:AppState, host=None):#, fos_ports:list):
     self.state=state
     self.wavemeter = pyBristolSCPI()
     self.fos_board_num = 0
@@ -189,7 +187,7 @@ class WavemeterMultiplexer:
     self.counter=0
     self.maxLag=0
     start = then
-    sleepTime=25#ms
+    sleepTime=50#25#ms
     while self.state.running:
       try:
         with self.state.lock: 

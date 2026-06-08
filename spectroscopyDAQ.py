@@ -48,9 +48,9 @@ class DAQViewer(QtWidgets.QMainWindow):
       self.readout.update(wavemeter.data)
     for fos_port in self.fos_port_list:
       if self.readout[fos_port]==0: continue#print("huh?", self.readout);continue #0 indicates a failed reading, but blows up as a frequency
-      if len(self.data[fos_port]['Times'])>0 and self.readout["time"]==self.data[fos_port]['Times'][-1]:continue #ignore duplicate reading
-      self.data[fos_port]['Times']+=[self.readout["time"]]
-      self.data[fos_port]['Wavelengths']+=[self.readout[fos_port ]]
+      if len(self.data[fos_port]['Times'])>0 and self.readout[fos_port]["latest_time"]==self.data[fos_port]['Times'][-1]:continue #ignore duplicate reading
+      self.data[fos_port]['Times']+=[self.readout[fos_port]["latest_time"]]
+      self.data[fos_port]['Wavelengths']+=[self.readout[fos_port]["latest_readout"]]
       if len(self.data[fos_port]['Times'])>self.maxLength:
         self.data[fos_port]['Times'].pop(0)
         self.data[fos_port]['Wavelengths'].pop(0)

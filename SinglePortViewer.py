@@ -4,9 +4,9 @@ from PyQt6 import QtWidgets, QtCore
 import sys, time
 
 class SinglePortViewer(QtWidgets.QWidget):
-  def __init__(self, wmc, fos_port=-1, label='', maxLength=1000, color='red', data=[[],[]]):
+  def __init__(self,fos_port=-1, label='', maxLength=1000, color='red', data=[[],[]]):
     super().__init__()
-    self.wavemeterClient=wmc
+    # self.wavemeterClient=wmc
     self.layout=QtWidgets.QVBoxLayout();
     self.upperLayout=QtWidgets.QHBoxLayout()
     self.labelBox=QtWidgets.QLabel(str(label)); #self.labelBox.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
@@ -55,58 +55,7 @@ class SinglePortViewer(QtWidgets.QWidget):
     self.instantiatePlotGroup(['Wavelength (nm)', 'Frequency (THz)'],self.leftPenList, title=self.label, xLabel='time')
     self.yCurve =self.curveList[0]; self.frequencyCurve=self.curveList[1]
     self.updateViews_current(); self.viewList[0].getViewBox().sigResized.connect(self.updateViews_current)
-    # self.updatePlot()
-    
-    self.pButtonParams=["read", "pid"]
-    self.lEditParams=["kp", "ki", "kd", "setpoint", "gain", "offset","vLow","vHigh"]
-    self.labelParams=["reading", "error", "output","time"]
-    self.params = self.pButtonParams+self.lEditParams+self.labelParams
-    
-    self.widgets={}
-    read_button = QtWidgets.QPushButton(f"Channel {self.fos_port}\nreadout")
-    pid_button = QtWidgets.QPushButton(f"Channel {self.fos_port}\nPID")
-    self.lowerVerticalLayout.addWidget(read_button)
-    self.lowerVerticalLayout.addWidget(pid_button)
-    self.widgets["read"]= read_button
-    self.widgets["pid"] = pid_button
-    self.lastUpdates={}
-    self.gridLayout=QtWidgets.QGridLayout(); self.lowerVerticalLayout.addLayout(self.gridLayout)
-    for row, param in enumerate(self.lEditParams, start=0):
-      self.gridLayout.addWidget(QtWidgets.QLabel(param), row, 0)
-      lEdit=QtWidgets.QLineEdit()
-      self.gridLayout.addWidget(lEdit, row, 1)
-      self.widgets[param]=lEdit
-      lEdit.returnPressed.connect(lambda param=param: self.adjustPID(param))
-    self.updateGUIConfig()
 
-  def adjustPID(self, param):
-    text=self.widgets[param].text()
-    print(f"attemting to adjust {param} to {text}")
-    oldVal=self.wavemeterClient.config[self.fos_port]
-    try:
-      newVal = float(text)
-    except:
-      print('error. Please provide a float.')
-    self.wavemeterClient.request_change(self.fos_port, **{param:newVal})
-    self.updateGUIConfig()
-
-  def updateGUIConfig(self):
-    config=self.wavemeterClient.config; print("\nconfig:", config)
-    wp = config[self.fos_port]
-    for parm in self.pButtonParams:
-      button=self.widgets[parm]
-      active=wp[f'active_{parm}']
-      if active: button.setStyleSheet("background-color: green")
-      else:      button.setStyleSheet("background-color: white")
-      if parm=="read"and active==False:
-        self.widgets["pid"].setStyleSheet("background-color: white")
-        self.widgets["pid"].setEnabled(active)
-        break
-    for parm in self.lEditParams:
-      try: text=str(wp[parm])
-      except: text = str(wp["pid"][parm])
-      if self.widgets[parm].text()!=text:
-        self.widgets[parm].setText(text)
 
   def instantiatePlotGroup(self, yLabelList, penList, title='', xLabel='', invertRightAxis=False, invertLeftAxis=True):
     if type(yLabelList) == list:
