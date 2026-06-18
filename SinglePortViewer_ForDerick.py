@@ -4,7 +4,7 @@ from PyQt6 import QtWidgets, QtCore
 import sys, time
 
 class SinglePortViewer(QtWidgets.QWidget):
-  def __init__(self, fos_port=-1, label='', maxLength=1000, color='red', data=[[],[]]):
+  def __init__(self, wmc, fos_port=-1, label='', maxLength=1000, color='red', data=[[],[]]):
     super().__init__()
     self.bcd={True:"green", False:"white"}#button color dictionary, obviously
     self.wavemeterClient=wmc

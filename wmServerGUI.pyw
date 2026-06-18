@@ -1,5 +1,5 @@
 # import pyqtgraph as pg
-from wmServer import AppState, WavemeterMultiplexer, SocketServer
+from wmServer import AppState, WavemeterSinglet, WavemeterMultiplexer, SocketServer
 import PyQt6 as qt
 from PyQt6 import QtWidgets, QtCore
 from PyQt6.QtGui import QIcon
@@ -24,15 +24,15 @@ class ServerGUI(QtWidgets.QMainWindow):
     self.params = self.pButtonParams+self.lEditParams+self.labelParams
     self.topGridLayout.addWidget(QtWidgets.QLabel("Parameter"), 0,0)
     for col, ch in enumerate(state.wavePorts.keys(), start=1):
-      self.topGridLayout.addWidget(QtWidgets.QLabel(f"Channel {ch+1}"), 0 ,col)
+      self.topGridLayout.addWidget(QtWidgets.QLabel(f"Channel {ch}"), 0 ,col)
     for row, param in enumerate(self.params, start=1):
       self.topGridLayout.addWidget(QtWidgets.QLabel(param), row, 0)
     self.widgets={}
     self.lastUpdates={}
     for col, ch in enumerate(state.wavePorts.keys(), start=1):
       wp = self.state.wavePorts[ch]
-      read_button = QtWidgets.QPushButton(f"Channel {ch+1}\nreadout")
-      pid_button = QtWidgets.QPushButton(f"Channel {ch+1}\nPID")
+      read_button = QtWidgets.QPushButton(f"Channel {ch}\nreadout")
+      pid_button = QtWidgets.QPushButton(f"Channel {ch}\nPID")
       self.topGridLayout.addWidget(read_button,1,col)
       self.topGridLayout.addWidget(pid_button,2,col)
       self.widgets[(ch, "read")]= read_button
@@ -56,19 +56,23 @@ class ServerGUI(QtWidgets.QMainWindow):
         self.topGridLayout.addWidget(label, row_offset, col)
       self.lastUpdates[ch] = wp.last_config
     self.latestTimes=defaultdict(float)
-    self.wm = wm
-    self.wm_thread=threading.Thread(target=self.wm.run)
-    self.server=server
-    self.server_thread=threading.Thread(target=self.server.run)
-    self.state.running=True
+    
+    
+    
     self.telemetryUpdatesTimer=QtCore.QTimer(self)
     self.telemetryUpdatesTimer.timeout.connect(self.getTelemetry)
     self.configUpdatesTimer=QtCore.QTimer(self)
     self.configUpdatesTimer.timeout.connect(self.checkForConfigUpdates)
     self.telemetryUpdatesTimer.start(5)
     self.configUpdatesTimer.start(100)
-    self.wm_thread.start()
-    self.server_thread.start()
+    self.state.start()
+    # self.wm = wm
+    # self.server=server
+    # self.wm_thread=threading.Thread(target=self.wm.run)
+    # self.server_thread=threading.Thread(target=self.server.run)
+    # self.state.running=True
+    # self.wm_thread.start()
+    # self.server_thread.start()
 
   def updateGUIParams(self,ch):
     wp = self.state.wavePorts[ch]
@@ -149,11 +153,7 @@ class ServerGUI(QtWidgets.QMainWindow):
       self.widgets[ch, param].setText(str(wp.getParam(param)))
 
   def safeExit(self):
-    self.state.running=False
-    self.server.close()
-    self.wm.close()
-    self.server_thread.join(timeout=2)
-    self.wm_thread.join(timeout=2)
+    self.state.stop()
     print("shutdown completed successfully")
 
   def closeEvent(self, event):
@@ -163,6 +163,7 @@ class ServerGUI(QtWidgets.QMainWindow):
 
 if __name__ == '__main__':
   state = AppState()
+  wm0=WavemeterSinglet(state, host='1.1.1.5')
   wm = WavemeterMultiplexer(state)
   server=SocketServer(state)
   print("Starting GUI")

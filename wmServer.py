@@ -1,13 +1,11 @@
 import numpy as np
 from dataclasses import dataclass, field
 from mcculw import ul
-from mcculw.enums import DigitalIODirection, ULRange, BoardInfo, DigitalIODirection, DigitalPortType
-from Bristol.pyBristolSCPI import pyBristolSCPI
-from Bristol.digital import DigitalProps, PortInfo
-# from Bristol.PID.daq import DAQ as PID_DAQ
+from mcculw.enums import DigitalIODirection, ULRange, DigitalIODirection
+from pyBristolSCPI import pyBristolSCPI
+from digital import DigitalProps
 import time, socket, threading, json
 
-# import wmPlotterGUI as wmpg #for quicker testing
 
 @dataclass
 class PIDState:
@@ -111,33 +109,42 @@ class WavePort:
     return(td)
 
 class AppState:
-  mlc_map = {0:(0,4),
-             1:(1,4),
-             2:(0,2),
-             3:(1,2),
-             4:(0,1),
-             5:(1,1),
-             6:(0,3),
-             7:(1,3)} 
-  def __init__(self, allChannels = [*range(8)], activeChannels = [0]):#,1,2,3,5]):
+  def __init__(self):#,1,2,3,5]):
     self.lock = threading.Lock()
     self.running=False
-    # self.activeChannels=activeChannels
     self.wavePorts={}
-    for ch in allChannels: self.wavePorts[ch]=WavePort(channel=ch)
-    for ch in activeChannels: self.wavePorts[ch].active_read=True
-    # self.pid_daq = PID_DAQ()
-    defaults={0:398.91112672,#398.91111876,
-              1:760,
-              2:935,
-              3:780,
-              4:787.62484,
-              5:0,
-              6:0,
-              7:0}
-    for ch, sp in defaults.items():
-      if ch in self.wavePorts:
-        self.wavePorts[ch].pid.setpoint=sp
+    self.devices=[]
+    self.threads=[]
+    self.next_channel=0
+    # for ch in allChannels: self.wavePorts[ch]=WavePort(channel=ch)
+    # for ch in activeChannels: self.wavePorts[ch].active_read=True
+    # # self.pid_daq = PID_DAQ()
+    # defaults={0:398.91112672,#398.91111876,
+    #           1:760,
+    #           2:935,
+    #           3:780,
+    #           4:787.62484,
+    #           5:0,
+    #           6:0,
+    #           7:0}
+    # for ch, sp in defaults.items():
+    #   if ch in self.wavePorts:
+    #     self.wavePorts[ch].pid.setpoint=sp
+  def allocate_channels(self,n):
+    channels=[]
+    with self.lock:
+      for _ in range(n):
+        ch=self.next_channel
+        self.next_channel+=1
+        self.wavePorts[ch] = WavePort(channel=ch)
+        channels.append(ch)
+    return channels
+  def register_device(self, device):
+    channels = self.allocate_channels(device.num_channels)
+    with self.lock:
+      self.devices.append(device)#I think this should perhaps occur when channels are allocated, and channels mapped to devices.
+    return channels
+
   def config_dict(self):
     with self.lock:
       return {"config": {ch: wp.config_dict() for ch, wp in self.wavePorts.items()}}
@@ -154,11 +161,32 @@ class AppState:
         if wp.active_read: output[ch+1] = self.wavePorts[ch].latest_reading
       return output
     
+  def start(self):
+    self.running=True
+    for device in self.devices:
+      thread=threading.Thread(target=device.run, daemon=True)
+      thread.start()
+      self.threads.append(thread)
+  
+  def stop(self):
+    self.running=False
+    for thread in self.threads:
+      thread.join(timeout=2)
+    self.threads.clear()
+    for device in self.devices:
+      try: device.close()
+      except Exception as e: print(e)
+    
 class WavemeterMultiplexer:
-  def __init__(self, state:AppState, host=None):#, fos_ports:list):
+  def __init__(self, state:AppState, host='10.199.199.1', fos_board_num=0, #host='10.199.199.1',
+               mlc_map = {0:(0,4), 1:(1,4), 2:(0,2), 3:(1,2), 4:(0,1), 5:(1,1), 6:(0,3), 7:(1,3)}):
     self.state=state
-    self.wavemeter = pyBristolSCPI()
-    self.fos_board_num = 0
+    self.num_channels=8
+    self.channels=self.state.register_device(self)
+    self.channel_offset=self.channels[0]#the switcher still needs to use values 0-7, regardless of how state numbers these channels
+    print(f"host={host}")
+    self.wavemeter = pyBristolSCPI(host=host) if host else pyBristolSCPI()
+    self.fos_board_num = fos_board_num
     digital_props=DigitalProps(self.fos_board_num)
     # Find the first port that supports output, defaulting to None if one is not found.
     self.port = next(
@@ -171,11 +199,18 @@ class WavemeterMultiplexer:
     if self.port.is_port_configurable: ul.d_config_port(self.fos_board_num,
                                                    self.port.type,
                                                    DigitalIODirection.OUT)
-    self.lastActiveChannels = [ch for ch in list(self.state.wavePorts.keys()) if self.state.wavePorts[ch].active_read]
+    
+    # self.channels = self.state.allocate_channels(8)
+    self.mlc_map={}
+    for i,ch in enumerate(self.channels):
+      self.mlc_map[ch] = mlc_map[i]
+    print(self.mlc_map)
+    self.lastActiveChannels = [ch for ch in self.channels if self.state.wavePorts[ch].active_read]
+    print(self.lastActiveChannels)
 
   def set_output_voltage(self, voltage, channel):
     '''applies PID voltage to appropriate output port'''
-    meas_comp_board_ch, meas_comp_board_num = self.state.mlc_map[channel]
+    meas_comp_board_ch, meas_comp_board_num = self.mlc_map[channel]
     try:
       output_value = ul.from_eng_units(meas_comp_board_num, ULRange.BIP10VOLTS, voltage)
       ul.a_out(meas_comp_board_num, meas_comp_board_ch, ULRange.BIP10VOLTS, output_value)
@@ -191,11 +226,12 @@ class WavemeterMultiplexer:
     while self.state.running:
       try:
         with self.state.lock: 
-          active_channels=[ch for ch in list(self.state.wavePorts.keys()) if self.state.wavePorts[ch].active_read]
+          active_channels=[ch for ch in self.channels if self.state.wavePorts[ch].active_read]
         for ch in active_channels: 
-            wp=self.state.wavePorts[ch]
+            with self.state.lock:
+              wp=self.state.wavePorts[ch]
             # print(f"switching to port {ch}")
-            ul.d_out(self.fos_board_num, self.port.type, ch) #switching FOS port
+            ul.d_out(self.fos_board_num, self.port.type, ch-self.channel_offset) #switching FOS port
             if (len(active_channels)>1) or (len(self.lastActiveChannels)>1): 
               time.sleep(0.001*sleepTime)#(.025)#this is how I'm implementing a switching delay
               measures=[]
@@ -204,7 +240,8 @@ class WavemeterMultiplexer:
               readout=np.median(measures)
             else: readout = self.wavemeter.readWL() #reading wavemeter
             if wp.active_pid:
-              error, voltage = wp.update_pid(readout)
+              with self.state.lock:
+                error, voltage = wp.update_pid(readout)
               self.set_output_voltage(voltage, ch)
               # print(f"channel {ch}; error:{error}; voltage:{voltage}")
             else:
@@ -230,9 +267,60 @@ class WavemeterMultiplexer:
     try: self.wavemeter.tn.close()
     except: pass
 
+class WavemeterSinglet: #class for wavemeter without a fiber switcher
+  def __init__(self, state:AppState, host='10.199.199.1', averaging=1):#, fos_ports:list):
+    self.state=state
+    self.num_channels=1
+    self.channel=self.state.register_device(self)[0]
+    print(f"host={host}")
+    self.wavemeter = pyBristolSCPI(host=host) if host else pyBristolSCPI()
+    # self.channel=self.state.allocate_channels(1)[0]
+    self.wp=self.state.wavePorts[self.channel]
+    self.averaging=averaging
+    
+  def set_output_voltage(self, voltage, channel):
+    '''applies PID voltage to appropriate output port'''
+    print(f"this function should set {voltage}V as output of channel {channel}.")
+    msg=f':SENS:PID:VOLT:DEF {voltage}\r\n'
+    self.wavemeter.tn.write(msg.encode())
+
+  def run(self):
+    print("Wavemeter thread started")
+    while self.state.running:
+      try:
+        measures=[]
+        if self.wp.active_read: 
+          for _ in range(self.averaging):
+            measures+=[self.wavemeter.readWL()] #reading wavemeter
+          readout=np.median(measures)
+          with self.state.lock:
+            active_pid = self.wp.active_pid
+            if active_pid:
+              error, voltage = self.wp.update_pid(readout)
+              self.set_output_voltage(voltage, self.channel)
+            else:
+              error = self.wp.pid.setpoint-readout
+              voltage=self.wp.latest_output
+            self.wp.latest_time = time.time()
+            self.wp.latest_reading=readout
+            self.wp.latest_error=error
+            self.wp.latest_output = voltage
+
+      except Exception as e:
+        if not self.state.running: break #exceptions are fine if app is in process of shutting down
+        print("Wavemeter thread crashed:", e)
+        import traceback
+        traceback.print_exc()
+        time.sleep(0.1)
+  def close(self):
+    try: self.wavemeter.tn.close()
+    except: pass
+
 class SocketServer:
   def __init__(self, state:AppState, host="0.0.0.0", port=5000):
     self.state=state
+    self.num_channels=0
+    self.state.register_device(self)
     self.host=host
     self.port=port
     self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -270,7 +358,7 @@ class SocketServer:
             print(t1-t0)
           elif command == "SET":
             try:
-              ch    = message["channel"]
+              ch    = int(message["channel"])
               with self.state.lock:
                   wp = self.state.wavePorts[ch]
                   wp.updateParams(**message["change"])
@@ -308,23 +396,23 @@ class SocketServer:
     try: self.server_socket.close()
     except: pass
 
+class Device:
+  num_channels = 0
+  def run(self):
+    raise NotImplementedError
+  def close(self):
+    pass
+
 if __name__ == '__main__':
   state = AppState()
-  wm = WavemeterMultiplexer(state)
-  wm_thread=threading.Thread(target=wm.run, daemon=True)
+  wm1 = WavemeterSinglet(state, host='1.1.1.5')
+  wm2 = WavemeterMultiplexer(state)
   server=SocketServer(state, port=5000)
-  server_thread=threading.Thread(target=server.run, daemon=True)
-  state.running=True
-  wm_thread.start()
-  server_thread.start()
+
+  state.start()
   for i in range(2):
     print(i)
     time.sleep(1)
-  # guiThread=threading.Thread(target=wmpg.main, daemon=True)
 
-  # guiThread.start()
   toStop = input('enter X to stop')
-  state.running=False
-  
-  wm.close()
-  server.close()
+  state.stop()

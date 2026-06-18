@@ -33,29 +33,9 @@ class wavemeterClient():
         message=json.loads(received)
         if message['type']!='total':return
         messData=message["data"]
-        for ch, wp in messData["telemetry"].items():new_data[int(ch)+1] = wp
-        for ch, wp in messData["config"].items():new_config[int(ch)+1] = wp
-          # if wp["active_read"]:
-          
-          # tt = wp["latest_time"]
-          # wl = wp["latest_reading"]
-          # if tt is None or wl==0:continue
-          # self.buffers[int(ch)+1].append((tt,wl))
-            # latest=wp['latest_time']
-            # if latest:
-            #   dt = latest - self.times[int(ch)+1]
-            #   if dt>0:print(ch, dt); self.times[int(ch)+1]=wp['latest_time']
-
-        ## self.message=self.received.split(",")
-        ## for kvp in self.message:
-        #   # key,value = kvp.split(":")
-        #   self.data[key]=value
-        #   # if key=="time": new_data[key]=float(value)
-        #   # else: new_data[int(key)]=float(value)
-        #   if key=="time": self.data[key]=float(value)
-        #   else: self.data[int(key)]=float(value)
-        # self.lastTimeStamp=new_data["time"]
-        # self.lastTimeStamp=self.data["time"]
+        for ch, wp in messData["telemetry"].items():new_data[int(ch)] = wp
+        for ch, wp in messData["config"].items():new_config[int(ch)] = wp
+        
         with self.socket_lock:
            self.leftover=leftover
            self.data = new_data
@@ -95,7 +75,7 @@ class wavemeterClient():
         if message['type']!='config':return
         messData=message["data"]
         for ch, wp in messData["config"].items():
-          new_config[int(ch)+1] = wp
+          new_config[int(ch)] = wp
         with self.socket_lock:
            self.leftover=leftover
            self.config = new_config
