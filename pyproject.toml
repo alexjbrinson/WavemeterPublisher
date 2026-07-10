@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wmLib"
+version = "0.1"
+dependencies = [
+    "mcculw",
+    "telnetlib3",
+    "numpy",
+    "pyqtgraph",
+    "PyQt6",
+    "matplotlib"
+]

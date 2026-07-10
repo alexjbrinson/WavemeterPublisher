@@ -1,0 +1,138 @@
+{
+  "1": {
+    "channel": 1,
+    "active_read": true,
+    "active_pid": false,
+    "pid": {
+      "kp": 1,
+      "kd": 0,
+      "ki": 0,
+      "setpoint": 398.911408,
+      "integral": 0
+    },
+    "vLow": -5,
+    "vHigh": 5,
+    "gain": 10,
+    "offset": 0,
+    "last_config": 1782745885.6549864
+  },
+  "2": {
+    "channel": 2,
+    "active_read": false,
+    "active_pid": false,
+    "pid": {
+      "kp": 1,
+      "kd": 0,
+      "ki": 0,
+      "setpoint": 760,
+      "integral": 0
+    },
+    "vLow": -5,
+    "vHigh": 5,
+    "gain": 10,
+    "offset": 0,
+    "last_config": 1782745885.655034
+  },
+  "3": {
+    "channel": 3,
+    "active_read": false,
+    "active_pid": false,
+    "pid": {
+      "kp": 1,
+      "kd": 0,
+      "ki": 0,
+      "setpoint": 935.179969,
+      "integral": 0
+    },
+    "vLow": -5,
+    "vHigh": 5,
+    "gain": 10,
+    "offset": 0,
+    "last_config": 1782745885.6551085
+  },
+  "4": {
+    "channel": 4,
+    "active_read": false,
+    "active_pid": false,
+    "pid": {
+      "kp": 1,
+      "kd": 0,
+      "ki": 0,
+      "setpoint": 820,
+      "integral": 0
+    },
+    "vLow": -5,
+    "vHigh": 5,
+    "gain": 10,
+    "offset": 0,
+    "last_config": 1782745885.6551387
+  },
+  "5": {
+    "channel": 5,
+    "active_read": false,
+    "active_pid": false,
+    "pid": {
+      "kp": 1,
+      "kd": 0,
+      "ki": 0,
+      "setpoint": 787.62484,
+      "integral": 0
+    },
+    "vLow": 0,
+    "vHigh": 10,
+    "gain": 10,
+    "offset": 0,
+    "last_config": 1782745885.6551561
+  },
+  "6": {
+    "channel": 6,
+    "active_read": false,
+    "active_pid": false,
+    "pid": {
+      "kp": 1,
+      "kd": 0,
+      "ki": 0,
+      "setpoint": 0,
+      "integral": 0
+    },
+    "vLow": -5,
+    "vHigh": 5,
+    "gain": 10,
+    "offset": 0,
+    "last_config": 1782745885.655172
+  },
+  "7": {
+    "channel": 7,
+    "active_read": false,
+    "active_pid": false,
+    "pid": {
+      "kp": 1,
+      "kd": 0,
+      "ki": 0,
+      "setpoint": 0,
+      "integral": 0
+    },
+    "vLow": -5,
+    "vHigh": 5,
+    "gain": 10,
+    "offset": 0,
+    "last_config": 1782745885.655195
+  },
+  "8": {
+    "channel": 8,
+    "active_read": false,
+    "active_pid": false,
+    "pid": {
+      "kp": 1,
+      "kd": 0,
+      "ki": 0,
+      "setpoint": 0,
+      "integral": 0
+    },
+    "vLow": -5,
+    "vHigh": 5,
+    "gain": 10,
+    "offset": 0,
+    "last_config": 1782745885.6552424
+  }
+}

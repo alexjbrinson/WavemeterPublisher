@@ -3,33 +3,68 @@ from collections import defaultdict, deque
 
 class wavemeterClient():
     def __init__(self, host, port):
-        self.host=host; self.port=port
-        self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.client_socket.settimeout(1)
-        self.client_socket.connect((self.host, self.port))
-        self.socket_lock = threading.Lock()
-        self.leftover=''
-        self.lastTimeStamp=-1
-        self.reading=False
-        self.data = {}
-        self.config={}
-        self.times=defaultdict(float)
-        self.other_lock=threading.Lock()
-        self.buffers = {ch: deque(maxlen=100000) for ch in range(1,9)}
+      self.host=host; self.port=port
+      self.connected=False
+      self.connect_lock = threading.Lock()
+      self.socket_lock = threading.Lock()
+      self.connect_to_server()
+      self.leftover=''
+      self.lastTimeStamp=-1
+      self.reading=False
+      self.data = {}
+      self.config={}
+      self.times=defaultdict(float)
+      self.other_lock=threading.Lock()
+      self.buffers = {ch: deque(maxlen=100000) for ch in range(1,9)}
+
+    def connect_to_server(self):
+      with self.connect_lock:
+        try:
+          sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+          sock.settimeout(1)
+          sock.connect((self.host, self.port))
+          with self.socket_lock:
+            try: self.client_socket.close()
+            except Exception as eee: print(eee)
+            self.client_socket=sock
+            self.leftover=""
+            self.connected=True
+            print("Successfully connected to server")
+        except Exception as ee:
+          self.connected=False
+          raise
+      # self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+      # self.client_socket.settimeout(1)
+      # self.client_socket.connect((self.host, self.port))
+
+    def reconnect(self):
+      self.connected=False
+      while self.reading:
+        try:
+          self.connect_to_server()
+          return
+        except Exception as ee:
+           print("Reconnect failed:",ee)
+           time.sleep(2)
 
     def make_query(self):
+      try:
         new_data={}
         new_config={}
         dt=0
         t0=time.perf_counter()
         command = {"cmd":"GET"}
         request=(json.dumps(command)+'\n').encode()
-        self.client_socket.send(request);
-        received=self.leftover
-        while "\n" not in received:
-            packet=self.client_socket.recv(4096).decode()#recv(4)
-            received+=packet
-        received, leftover = received.split('\n',1)
+        with self.socket_lock:
+          self.client_socket.sendall(request);
+          received=self.leftover
+          while "\n" not in received:
+              packet=self.client_socket.recv(4096).decode()#recv(4)
+              if not packet: 
+                print("You're free!")
+                return
+              received+=packet
+          received, leftover = received.split('\n',1)
         message=json.loads(received)
         if message['type']!='total':return
         messData=message["data"]
@@ -43,16 +78,35 @@ class wavemeterClient():
         dt+=time.perf_counter()-t0
         # print("time elapsed:", dt)
         # return(self.data)
+      except (socket.timeout,
+          ConnectionResetError,
+          BrokenPipeError,
+          OSError) as ee:
+        print("Lost connection1:", ee)
+        self.reconnect()
+
     def request_change(self, ch, **kwargs):
       command = {"cmd"    :"SET",
                  "channel":ch,
                  "change" :kwargs}
-                #  "param"  :param,
-                #  "value"  :value}
+      print(f"command:{command}")
       request=(json.dumps(command)+'\n').encode()
-      with self.socket_lock:
-        self.client_socket.send(request)
-      pass
+      try:
+        with self.socket_lock:
+          self.client_socket.sendall(request)
+          received=""
+          while "\n" not in received:
+            print("you're here now")
+            packet=self.client_socket.recv(4096).decode()#recv(4)
+            received+=packet
+          received, leftover = received.split('\n',1)
+      except (socket.timeout,
+          ConnectionResetError,
+          BrokenPipeError,
+          OSError) as ee:
+        print("Lost connection2:", ee)
+        self.reconnect()
+
     def get_new_samples(self, ch):
       with self.other_lock:
         samples=list(self.buffers[ch])
@@ -60,39 +114,50 @@ class wavemeterClient():
       return samples
     
     def get_config(self):
-        new_config={}
-        dt=0
-        t0=time.perf_counter()
-        command = {"cmd":"CONFIG"}
-        request=(json.dumps(command)+'\n').encode()
-        self.client_socket.send(request);
-        received=self.leftover
-        while "\n" not in received:
+      new_config={}
+      dt=0
+      t0=time.perf_counter()
+      command = {"cmd":"CONFIG"}
+      request=(json.dumps(command)+'\n').encode()
+      try:
+        with self.socket_lock:
+          self.client_socket.sendall(request)
+          received=""
+          while "\n" not in received:
+            print("you're here now")
             packet=self.client_socket.recv(4096).decode()#recv(4)
             received+=packet
-        received, leftover = received.split('\n',1)
+          received, leftover = received.split('\n',1)
         message=json.loads(received)
         if message['type']!='config':return
         messData=message["data"]
         for ch, wp in messData["config"].items():
           new_config[int(ch)] = wp
         with self.socket_lock:
-           self.leftover=leftover
            self.config = new_config
         dt+=time.perf_counter()-t0
         # print("time elapsed:", dt)
         # return(self.data)
+      except (socket.timeout,
+          ConnectionResetError,
+          BrokenPipeError,
+          OSError) as ee:
+        print("Lost connection3:", ee)
+        self.reconnect()
 
     def continuous_readout(self):
-      while self.reading: self.make_query()
+      while self.reading: 
+        self.make_query()
+
     def start(self):
       self.reading=True
       self.make_query()
       self.readout_thread=threading.Thread(target=self.continuous_readout, daemon=True)
       self.readout_thread.start()
     def stop(self):
-      self.reading=False
-      self.readout_thread.join()
+      if self.reading:
+        self.reading=False
+        self.readout_thread.join()
       self.data={}
 
 class dummyWavemeter():
@@ -132,11 +197,12 @@ if __name__ == '__main__':
     wmc.start(); print("client running")
     wmc.get_config()
     print(wmc.config)
+    # wmc.stop()
     for i in range(100):
         # print(wmc.data[1])
         # print(wmc.data[2])
         time.sleep(0.01)
-    # wmc.stop()
+    wmc.request_change(6,kp=420)
     # print("this", wmc.data)
     quit()
     app = pg.mkQApp("Wavemeter Logger")

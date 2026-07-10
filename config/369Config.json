@@ -1,0 +1,19 @@
+{
+  "0": {
+    "channel": 0,
+    "active_read": true,
+    "active_pid": false,
+    "pid": {
+      "kp": 1,
+      "kd": 0,
+      "ki": 0,
+      "setpoint": 369.525,
+      "integral": 0
+    },
+    "vLow": -5,
+    "vHigh": 5,
+    "gain": 10,
+    "offset": 0,
+    "last_config": 1782745883.8470154
+  }
+}

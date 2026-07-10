@@ -89,7 +89,7 @@ class SinglePortViewer(QtWidgets.QWidget):
   def toggleChannelRead(self):
     oldVal=self.wavemeterClient.config[self.fos_port]["active_read"]
     newVal=not oldVal
-    self.wavemeterClient.request_change(self.fos_port-1, **{"active_read":newVal})
+    self.wavemeterClient.request_change(self.fos_port, **{"active_read":newVal})
     if newVal:
       self.widgets["read"].setStyleSheet("background-color: green")
     else: 
@@ -102,7 +102,7 @@ class SinglePortViewer(QtWidgets.QWidget):
     button=self.widgets["pid"]
     oldVal=self.wavemeterClient.config[self.fos_port]["active_pid"]
     newVal=not oldVal
-    self.wavemeterClient.request_change(self.fos_port-1, **{"active_pid":newVal})
+    self.wavemeterClient.request_change(self.fos_port, **{"active_pid":newVal})
     if newVal:
       button.setStyleSheet("background-color: green")
     else: 
@@ -117,10 +117,10 @@ class SinglePortViewer(QtWidgets.QWidget):
     except Exception as ee: print(ee); oldVal = wp["pid"][param]
     try:
       newVal = float(text)
-      self.wavemeterClient.request_change(self.fos_port-1, **{param:newVal})
-    except:
+      self.wavemeterClient.request_change(self.fos_port, **{param:newVal})
+    except Exception as ee:
       newVal=oldVal
-      print('error. Please provide a float.')
+      print(ee)
     self.updateGUIConfig()
 
   def updateGUIConfig(self):
@@ -139,7 +139,7 @@ class SinglePortViewer(QtWidgets.QWidget):
 
     for parm in self.lEditParams:
       try: text=str(wp[parm])
-      except: text = str(wp["pid"][parm])
+      except Exception as ee: print(ee); text = str(wp["pid"][parm])
       if self.widgets[parm].text()!=text:
         self.widgets[parm].setText(text)
 

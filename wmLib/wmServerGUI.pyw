@@ -1,11 +1,9 @@
 # import pyqtgraph as pg
-from wmServer import AppState, WavemeterSinglet, WavemeterMultiplexer, SocketServer
-import PyQt6 as qt
+from wmLib.wmServer import AppState, WavemeterSinglet, WavemeterMultiplexer, SocketServer
 from PyQt6 import QtWidgets, QtCore
-from PyQt6.QtGui import QIcon
-import threading, sys
+import sys
 from datetime import datetime as datetime
-from zoneinfo import ZoneInfo
+# from zoneinfo import ZoneInfo
 from collections import defaultdict
 
 class ServerGUI(QtWidgets.QMainWindow):
@@ -56,9 +54,7 @@ class ServerGUI(QtWidgets.QMainWindow):
         self.topGridLayout.addWidget(label, row_offset, col)
       self.lastUpdates[ch] = wp.last_config
     self.latestTimes=defaultdict(float)
-    
-    
-    
+       
     self.telemetryUpdatesTimer=QtCore.QTimer(self)
     self.telemetryUpdatesTimer.timeout.connect(self.getTelemetry)
     self.configUpdatesTimer=QtCore.QTimer(self)
@@ -66,13 +62,6 @@ class ServerGUI(QtWidgets.QMainWindow):
     self.telemetryUpdatesTimer.start(5)
     self.configUpdatesTimer.start(100)
     self.state.start()
-    # self.wm = wm
-    # self.server=server
-    # self.wm_thread=threading.Thread(target=self.wm.run)
-    # self.server_thread=threading.Thread(target=self.server.run)
-    # self.state.running=True
-    # self.wm_thread.start()
-    # self.server_thread.start()
 
   def updateGUIParams(self,ch):
     wp = self.state.wavePorts[ch]
@@ -163,12 +152,11 @@ class ServerGUI(QtWidgets.QMainWindow):
 
 if __name__ == '__main__':
   state = AppState()
-  wm0=WavemeterSinglet(state, host='1.1.1.5')
-  wm = WavemeterMultiplexer(state)
+  wm0=WavemeterSinglet(state, host='1.1.1.5', config='369Config.json')
+  wm = WavemeterMultiplexer(state, config="switcherConfig.json")
   server=SocketServer(state)
   print("Starting GUI")
   app = QtWidgets.QApplication(sys.argv)
   window = ServerGUI(state, wm, server)
   window.show()
   sys.exit(app.exec())
-  wmc.stop()

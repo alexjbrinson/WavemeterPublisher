@@ -2,8 +2,8 @@ import numpy as np
 from dataclasses import dataclass, field
 from mcculw import ul
 from mcculw.enums import DigitalIODirection, ULRange, DigitalIODirection
-from pyBristolSCPI import pyBristolSCPI
-from digital import DigitalProps
+from wmLib.pyBristolSCPI import pyBristolSCPI
+from wmLib.digital import DigitalProps
 import time, socket, threading, json
 
 
@@ -139,7 +139,10 @@ class AppState:
         self.wavePorts[ch] = WavePort(channel=ch)
         channels.append(ch)
     return channels
-  def register_device(self, device):
+  
+  def register_device(self, device, config=None):
+    if config:
+      assert True#TODO
     channels = self.allocate_channels(device.num_channels)
     with self.lock:
       self.devices.append(device)#I think this should perhaps occur when channels are allocated, and channels mapped to devices.
@@ -158,7 +161,7 @@ class AppState:
     with self.lock:
       output={"time":time.time()}
       for ch, wp in self.wavePorts.items():
-        if wp.active_read: output[ch+1] = self.wavePorts[ch].latest_reading
+        if wp.active_read: output[ch] = self.wavePorts[ch].latest_reading#Just removed +1 on lhs
       return output
     
   def start(self):
@@ -174,15 +177,29 @@ class AppState:
       thread.join(timeout=2)
     self.threads.clear()
     for device in self.devices:
-      try: device.close()
+      try:
+        device.save_config(device.config_path)
+        device.close()
       except Exception as e: print(e)
+
+class Device:
+  num_channels = 0
+  config_path=None
+  def run(self):
+    raise NotImplementedError
+  def close(self):
+    pass
+  def load_config(self, config_path):
+    pass
+  def save_config(self, config_path):
+    pass
     
-class WavemeterMultiplexer:
+class WavemeterMultiplexer(Device):
   def __init__(self, state:AppState, host='10.199.199.1', fos_board_num=0, #host='10.199.199.1',
-               mlc_map = {0:(0,4), 1:(1,4), 2:(0,2), 3:(1,2), 4:(0,1), 5:(1,1), 6:(0,3), 7:(1,3)}):
+               mlc_map = {0:(0,4), 1:(1,4), 2:(0,2), 3:(1,2), 4:(0,1), 5:(1,1), 6:(0,3), 7:(1,3)}, config=None):
     self.state=state
     self.num_channels=8
-    self.channels=self.state.register_device(self)
+    self.channels=self.state.register_device(self, config=config)
     self.channel_offset=self.channels[0]#the switcher still needs to use values 0-7, regardless of how state numbers these channels
     print(f"host={host}")
     self.wavemeter = pyBristolSCPI(host=host) if host else pyBristolSCPI()
@@ -207,6 +224,31 @@ class WavemeterMultiplexer:
     print(self.mlc_map)
     self.lastActiveChannels = [ch for ch in self.channels if self.state.wavePorts[ch].active_read]
     print(self.lastActiveChannels)
+    if config: self.config_path=config; self.load_config(config)
+
+  def load_config(self, config_path):
+    self.config_path=config_path
+    print(f'loading {config_path} as config file for channels {self.channels}')
+    with open(config_path,"r") as file: data=json.load(file)
+    for ii,config_ch in enumerate(sorted(data.keys())):
+      config_dict=data[config_ch]
+      print(config_dict)
+      config_dict.pop("channel")
+      pid_data=config_dict.pop("pid", None)
+      with self.state.lock:
+        wp=self.state.wavePorts[self.channels[ii]]
+        wp.updateParams(**(config_dict|pid_data))
+    return
+
+  def save_config(self, config_path):
+    self.config_path=config_path
+    data={}
+    with self.state.lock: 
+      for ii, ch in enumerate(self.channels):
+        wp=self.state.wavePorts[ch]
+        data[ch]=wp.config_dict()
+    with open(config_path,"w") as file: json.dump(data, file, indent=2)
+    print(f"config file for channels {self.channels} saved as {config_path}")
 
   def set_output_voltage(self, voltage, channel):
     '''applies PID voltage to appropriate output port'''
@@ -239,6 +281,7 @@ class WavemeterMultiplexer:
                 measures+=[self.wavemeter.readWL()] #reading wavemeter
               readout=np.median(measures)
             else: readout = self.wavemeter.readWL() #reading wavemeter
+            if readout == 0: continue
             if wp.active_pid:
               with self.state.lock:
                 error, voltage = wp.update_pid(readout)
@@ -267,16 +310,37 @@ class WavemeterMultiplexer:
     try: self.wavemeter.tn.close()
     except: pass
 
-class WavemeterSinglet: #class for wavemeter without a fiber switcher
-  def __init__(self, state:AppState, host='10.199.199.1', averaging=1):#, fos_ports:list):
+class WavemeterSinglet(Device): #class for wavemeter without a fiber switcher
+  def __init__(self, state:AppState, host='10.199.199.1', averaging=1, config=None):
     self.state=state
     self.num_channels=1
-    self.channel=self.state.register_device(self)[0]
+    self.channel=self.state.register_device(self, config=config)[0]
+    self.wp=self.state.wavePorts[self.channel]
     print(f"host={host}")
     self.wavemeter = pyBristolSCPI(host=host) if host else pyBristolSCPI()
-    # self.channel=self.state.allocate_channels(1)[0]
-    self.wp=self.state.wavePorts[self.channel]
     self.averaging=averaging
+    if config: self.config_path=config; self.load_config(config)
+    
+  def load_config(self, config_path):
+    self.config_path=config_path
+    print(f'loading {config_path} as config file for channel {self.channel}')
+    with open(config_path,"r") as file: data=json.load(file)
+    assert len(data.keys())<=1
+    for ii,config_ch in enumerate(sorted(data.keys())):
+      config_dict=data[config_ch]
+      print(config_dict)
+      config_dict.pop("channel")
+      pid_data=config_dict.pop("pid", None)
+      with self.state.lock:
+        self.wp.updateParams(**(config_dict|pid_data))
+    return
+  
+  def save_config(self, config_path):
+    self.config_path=config_path
+    data={}
+    data[self.channel]=self.wp.config_dict()
+    with open(config_path,"w") as file: json.dump(data, file,indent=2)
+    print(f"config file for channel {self.channel} saved as {config_path}")
     
   def set_output_voltage(self, voltage, channel):
     '''applies PID voltage to appropriate output port'''
@@ -293,6 +357,7 @@ class WavemeterSinglet: #class for wavemeter without a fiber switcher
           for _ in range(self.averaging):
             measures+=[self.wavemeter.readWL()] #reading wavemeter
           readout=np.median(measures)
+          if readout==0: continue
           with self.state.lock:
             active_pid = self.wp.active_pid
             if active_pid:
@@ -316,7 +381,7 @@ class WavemeterSinglet: #class for wavemeter without a fiber switcher
     try: self.wavemeter.tn.close()
     except: pass
 
-class SocketServer:
+class SocketServer(Device):
   def __init__(self, state:AppState, host="0.0.0.0", port=5000):
     self.state=state
     self.num_channels=0
@@ -330,12 +395,16 @@ class SocketServer:
   def handle_client(self, conn, address):
     print(f"Client connected: {address}")
     try: 
+      buffer=""
       while self.state.running:
         try:
-          data = conn.recv(1024)
-          if not data:
-            break
-          message = json.loads(data.decode())
+          packet=conn.recv(1024).decode()
+          if not packet: break
+          buffer+=packet
+          while "\n" in buffer:
+            data,buffer = buffer.split("\n",1)
+            if not data: continue
+          message = json.loads(data)
           command = message.get("cmd")
           # command = data.decode().strip()  # Eventually, actually cater to client's request
           # print("command:", command)
@@ -363,10 +432,12 @@ class SocketServer:
                   wp = self.state.wavePorts[ch]
                   wp.updateParams(**message["change"])
                   print("Done")
+                  message = (json.dumps({"type":"status", "status":"ok"})+'\n')
+                  conn.sendall(message.encode())
                   # conn.sendall(b'{"status":"ok"}\n')
             except Exception as ee:
               print(ee)
-              # conn.sendall(b'{"error":"Parameter assignment failed.'+ee.encode()+b'"}\n')
+              conn.sendall(b'{"error":"Parameter assignment failed.'+ee.encode()+b'"}\n')
           else:
             conn.sendall(b'{"error":"unknown command"}')
         except (ConnectionResetError, BrokenPipeError):
@@ -396,18 +467,16 @@ class SocketServer:
     try: self.server_socket.close()
     except: pass
 
-class Device:
-  num_channels = 0
-  def run(self):
-    raise NotImplementedError
-  def close(self):
-    pass
-
 if __name__ == '__main__':
   state = AppState()
-  wm1 = WavemeterSinglet(state, host='1.1.1.5')
-  wm2 = WavemeterMultiplexer(state)
+  config_path='369Config.json'
+  config_path2='switcherConfig.json'
+  wm1 = WavemeterSinglet(state, host='1.1.1.5', config=config_path)
+  wm2 = WavemeterMultiplexer(state, config=config_path2)
   server=SocketServer(state, port=5000)
+  
+  wm1.save_config(config_path)
+  wm2.save_config(config_path2)
 
   state.start()
   for i in range(2):

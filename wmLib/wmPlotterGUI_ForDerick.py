@@ -7,8 +7,8 @@ import sys
 from urllib.request import urlopen
 import time
 import os
-from client_class import wavemeterClient, dummyWavemeter
-from SinglePortViewer_ForDerick import SinglePortViewer
+from wmLib.client_class import wavemeterClient, dummyWavemeter
+from wmLib.SinglePortViewer_ForDerick import SinglePortViewer
 import threading
 from datetime import datetime as datetime
 
@@ -20,7 +20,7 @@ class MainGUI(QtWidgets.QMainWindow):
     self.gridLayout=QtWidgets.QGridLayout(); self.verticalLayout.addLayout(self.gridLayout)
     if type(wavemeter) == list: self.wavemeter_list=wavemeter
     else: self.wavemeter_list=[wavemeter]; self.wavemeter=wavemeter
-    self.fos_port_list = [5]#*range(1,5)]#[*range(1,9)]
+    self.fos_port_list = [6]#*range(1,5)]#[*range(1,9)]
     self.data={port:{"Times":[],"Wavelengths":[]} for port in self.fos_port_list}
     self.watching={port:False for port in self.fos_port_list}
     for port in watch_list:
@@ -37,12 +37,7 @@ class MainGUI(QtWidgets.QMainWindow):
     self.timer.timeout.connect(self.update)
     self.timer.start(33)
 
-  def updateConfigs(self): #this is very bad at finding when the config updated, and I don't know why.TODO
-    # print("update configs called")
-    # self.wavemeter.get_config()
-    # while self.wavemeter.config=={}: 
-    #   print("this is getting called...")
-    #   self.wavemeter.get_config() #just in case
+  def updateConfigs(self):
     for port in self.fos_port_list:
       if self.watching[port]:
         last_config_time = self.wavemeter.config[port]['last_config']
@@ -79,7 +74,7 @@ class MainGUI(QtWidgets.QMainWindow):
     i=len(self.portViewers.keys())
     row=i%2
     col=i//2
-    self.portViewers[fos_port]=SinglePortViewer(self.wavemeter_list[0], fos_port=fos_port, label=f'Port {fos_port}', color=self.colorList[fos_port-1]
+    self.portViewers[fos_port]=SinglePortViewer(self.wavemeter_list[0], fos_port=fos_port, label=f'Port {fos_port}', color=self.colorList[fos_port]
       , data=[self.data[fos_port][key] for key in ["Times", "Wavelengths"]], maxLength=self.maxLength)
     self.gridLayout.addLayout(self.portViewers[fos_port].layout, row, col)
     # self.portViewers[fos_port].closeButton.clicked.connect((lambda x: lambda: self.closePortViewer(x))(fos_port))#stupid syntax to avoid binding to reference 
@@ -100,7 +95,6 @@ class MainGUI(QtWidgets.QMainWindow):
       for ch in wavemeter.buffers.keys():
         samples = wavemeter.get_new_samples(ch)
         self.portViewers[ch].addSamples(samples)
-
     
   def update(self):
     self.readout={}
@@ -161,14 +155,14 @@ class MainGUI(QtWidgets.QMainWindow):
     for wm in self.wavemeter_list:
       wm.stop()
 
-def main_old():
+def main():
   print("Starting GUI")
-  try:
-    # wmc=wavemeterClient("10.54.6.173", 5000)
-    wmc=wavemeterClient("10.54.6.156", 5000)
-    wmc.start(); print("client running")
-  except:
-    wmc=dummyWavemeter(num_ports=8)
+  wmc=wavemeterClient("10.54.6.156", 5000)
+  wmc.start(); print("client running")
+  # try:
+  #   wmc=wavemeterClient("10.54.6.156", 5000)
+  #   wmc.start(); print("client running")
+  # except Exception as ee: print(ee);  wmc=dummyWavemeter(num_ports=8)
   print(wmc.data)
   app = QtWidgets.QApplication(sys.argv)
   window = MainGUI(wmc, watch_list=[*range(1,9)], colorList=4*['blue','orange','red','magenta'])
@@ -176,33 +170,6 @@ def main_old():
   window.show()
   sys.exit(app.exec())
   wmc.stop()
-
-def main():
-    print("GUI main() entered")
-
-    try:
-        wmc = wavemeterClient("10.54.6.173", 5000)
-        wmc.start()
-        print("client running")
-    except Exception as e:
-        print("Client failed:", e)
-        wmc = dummyWavemeter(num_ports=8)
-
-    print("Creating QApplication")
-    app = QtWidgets.QApplication(sys.argv)
-
-    print("Creating window")
-    window = MainGUI(
-        wmc,
-        watch_list=[*range(1,9)],
-        colorList=4*['blue','orange','red','magenta']
-    )
-
-    print("Showing window")
-    window.show()
-
-    print("Entering event loop")
-    sys.exit(app.exec())
     
 if __name__ == '__main__':
-  main_old()
+  main()

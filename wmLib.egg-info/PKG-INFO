@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: wmLib
+Version: 0.1
+Requires-Dist: mcculw
+Requires-Dist: telnetlib3
+Requires-Dist: numpy
+Requires-Dist: pyqtgraph
+Requires-Dist: PyQt6
+Requires-Dist: matplotlib

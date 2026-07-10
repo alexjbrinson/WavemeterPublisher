@@ -4,11 +4,11 @@ import PyQt6 as qt
 from PyQt6 import QtWidgets, QtCore
 from PyQt6.QtGui import QIcon
 import sys
-from urllib.request import urlopen
+# from urllib.request import urlopen
 import time
 import os
-from client_class import wavemeterClient, dummyWavemeter
-from SinglePortViewer import SinglePortViewer
+from wmLib.client_class import wavemeterClient, dummyWavemeter
+from wmLib.SinglePortViewer import SinglePortViewer
 import threading
 
 class MainGUI(QtWidgets.QMainWindow):
