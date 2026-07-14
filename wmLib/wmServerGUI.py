@@ -18,7 +18,7 @@ class ServerGUI(QtWidgets.QMainWindow):
     self.bottomGridLayout=QtWidgets.QGridLayout(); self.verticalLayout.addLayout(self.bottomGridLayout)
     self.pButtonParams=["read", "pid"]
     self.lEditParams=["kp", "ki", "kd", "setpoint", "gain", "offset","vLow","vHigh"]
-    self.labelParams=["reading", "error", "output","time"]
+    self.labelParams=["reading", "error", "voltage","time"]
     self.params = self.pButtonParams+self.lEditParams+self.labelParams
     self.topGridLayout.addWidget(QtWidgets.QLabel("Parameter"), 0,0)
     for col, ch in enumerate(state.wavePorts.keys(), start=1):
@@ -129,7 +129,8 @@ class ServerGUI(QtWidgets.QMainWindow):
       wp.disablePID()      
       button.setStyleSheet("background-color: white")
 
-  def adjustPID(self, ch, param): 
+  def adjustPID(self, ch, param):
+    print(f"adjusting {ch} {param}")
     with self.state.lock:
       wp = self.state.wavePorts[ch]
       oldVal = wp.getParam(param)
@@ -151,9 +152,13 @@ class ServerGUI(QtWidgets.QMainWindow):
     event.accept()
 
 if __name__ == '__main__':
+  from platformdirs import user_config_dir
+  from pathlib import Path
+  config_dir = Path(user_config_dir("WavemeterConfigs", "wmLib"))
+  config_dir.mkdir(parents=True, exist_ok=True)
   state = AppState()
-  wm0=WavemeterSinglet(state, host='1.1.1.5', config='369Config.json')
-  wm = WavemeterMultiplexer(state, config="switcherConfig.json")
+  wm0=WavemeterSinglet(state, host='1.1.1.5', config=config_dir/'singletConfig.json')
+  wm = WavemeterMultiplexer(state,            config=config_dir/'switcherConfig.json')
   server=SocketServer(state)
   print("Starting GUI")
   app = QtWidgets.QApplication(sys.argv)

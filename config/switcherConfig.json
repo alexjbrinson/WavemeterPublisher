@@ -14,7 +14,8 @@
     "vHigh": 5,
     "gain": 10,
     "offset": 0,
-    "last_config": 1782745885.6549864
+    "last_config": 1783980492.077602,
+    "latest_output": 0
   },
   "2": {
     "channel": 2,
@@ -31,7 +32,8 @@
     "vHigh": 5,
     "gain": 10,
     "offset": 0,
-    "last_config": 1782745885.655034
+    "last_config": 1783980492.0776477,
+    "latest_output": 0
   },
   "3": {
     "channel": 3,
@@ -48,7 +50,8 @@
     "vHigh": 5,
     "gain": 10,
     "offset": 0,
-    "last_config": 1782745885.6551085
+    "last_config": 1783980492.0776975,
+    "latest_output": 0
   },
   "4": {
     "channel": 4,
@@ -65,24 +68,26 @@
     "vHigh": 5,
     "gain": 10,
     "offset": 0,
-    "last_config": 1782745885.6551387
+    "last_config": 1783980492.0777361,
+    "latest_output": 0
   },
   "5": {
     "channel": 5,
     "active_read": false,
     "active_pid": false,
     "pid": {
-      "kp": 1,
-      "kd": 0,
-      "ki": 0,
-      "setpoint": 787.62484,
-      "integral": 0
+      "kp": 100.0,
+      "kd": 0.0,
+      "ki": 0.0,
+      "setpoint": 787.6215,
+      "integral": -270506901.7891779
     },
-    "vLow": 0,
-    "vHigh": 10,
-    "gain": 10,
-    "offset": 0,
-    "last_config": 1782745885.6551561
+    "vLow": 0.0,
+    "vHigh": 10.0,
+    "gain": -10.0,
+    "offset": 5.0,
+    "last_config": 1783980492.0777826,
+    "latest_output": 0
   },
   "6": {
     "channel": 6,
@@ -93,13 +98,14 @@
       "kd": 0,
       "ki": 0,
       "setpoint": 0,
-      "integral": 0
+      "integral": -815.3627058249742
     },
     "vLow": -5,
     "vHigh": 5,
     "gain": 10,
-    "offset": 0,
-    "last_config": 1782745885.655172
+    "offset": 3.0,
+    "last_config": 1783980492.0778043,
+    "latest_output": -5
   },
   "7": {
     "channel": 7,
@@ -116,7 +122,8 @@
     "vHigh": 5,
     "gain": 10,
     "offset": 0,
-    "last_config": 1782745885.655195
+    "last_config": 1783980492.0778346,
+    "latest_output": 0
   },
   "8": {
     "channel": 8,
@@ -133,6 +140,7 @@
     "vHigh": 5,
     "gain": 10,
     "offset": 0,
-    "last_config": 1782745885.6552424
+    "last_config": 1783980492.0778787,
+    "latest_output": 0
   }
 }

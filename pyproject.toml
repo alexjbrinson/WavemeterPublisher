@@ -4,12 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wmLib"
-version = "0.1"
+version = "0.1.1"
 dependencies = [
     "mcculw",
     "telnetlib3",
     "numpy",
     "pyqtgraph",
     "PyQt6",
-    "matplotlib"
+    "matplotlib",
+    "platformdirs"
 ]
+
+[tool.setuptools]
+packages = ["wmLib"]

@@ -4,94 +4,47 @@ from mcculw import ul
 from mcculw.enums import DigitalIODirection, ULRange, DigitalIODirection
 from wmLib.Bristol.pyBristolSCPI import pyBristolSCPI
 from wmLib.Bristol.digital import DigitalProps
-from wmLib.Bristol.PID.daq import DAQ as PID_DAQ
 import os, time, socket, threading, json
 
 
 @dataclass
 class PIDState:
-  _dll_channel  : int    =  0
-  kp            : float  =  1
-  ki            : float  =  0
-  kd            : float  =  0
-  setpoint      : float  =  0
-  vLow          : float  = -5
-  vHigh         : float  =  5
-  gain          : float  =  10
-  offset        : float  =  0
-  integral      : float  =  0
-  # latest_error  : float  =  0
-  # latest_output : float  =  0
-  # latest_voltage: float  =  0
-  previous_error: float  =  0
-  previous_time : float  =  field(default_factory=time.perf_counter)
-  pid_daq       : PID_DAQ = field(default_factory=PID_DAQ) #this is to interface with the Bristol PID engine
-
-  def __post_init__(self):
-    self.sync()
-
-  def sync(self):
-    print("syncing pid_daq")
-    self.pid_daq.setKp(self.kp            , self._dll_channel)
-    self.pid_daq.setKi(self.ki            , self._dll_channel)
-    self.pid_daq.setKd(self.kd            , self._dll_channel)
-    self.pid_daq.setSetPoint(self.setpoint, self._dll_channel)
-    self.pid_daq.setGain(self.gain        , self._dll_channel)
-    self.pid_daq.setOffset(self.offset    , self._dll_channel)
-    self.pid_daq.setLowVoltage(self.vLow  , self._dll_channel)
-    self.pid_daq.setHighVoltage(self.vHigh, self._dll_channel)
-
-  def clamp(self, value):    return max(self.vLow, min(self.vHigh, value))
-  def wavelength_to_voltage(self, pid_output): return(self.gain*pid_output+self.offset)
-
-  def update(self, measurement, compute_method="bristol"):
-    error_daq, output_daq, voltage_daq=self.pid_daq.computePID((0,0,self._dll_channel),measurement)
+  kp      : float = 1
+  ki      : float = 0
+  kd      : float = 0
+  setpoint: float = 0
+  integral: float = 0
+  previous_error: float = 0
+  previous_time: float = field(default_factory=time.perf_counter)
+  def update(self, measurement):
     now = time.perf_counter()
-    error=measurement-self.setpoint
+    error=self.setpoint-measurement
     if self.previous_time:
       dt = now-self.previous_time
       if dt<=0: dt=1e-6
-      derivative = -(error-self.previous_error)/dt
+      derivative = (error-self.previous_error)/dt
     else:
       dt=0
       derivative=0
     
-    self.integral += self.ki*error*dt
-    output=self.kp*error + self.integral + self.kd*derivative
-    voltage = self.clamp(self.wavelength_to_voltage(output))
+    self.integral += error*dt
+    output=self.kp*error + self.ki*self.integral + self.kd*derivative
     self.previous_error=error
     self.previous_time = now
-    #TODO: keep investigating the diff in PID outputs vs bristol engine
-    # print("measurement:", measurement, "Setpoint:", self.setpoint)
-    # print("original :", error, output, voltage, self.integral)
-    # print("daqEngine:", error_daq, output_daq, voltage_daq)
-    if compute_method=="bristol":
-      return(error_daq, output_daq, voltage_daq)
-    return(error, output, voltage)
+    return(error, output)
   
-  def reset(self, measurement, voltage):
-    #TODO: keep investigating the effect this has on PID outputs vs bristol engine
+  def reset(self, measurement, current_voltage, gain, offset):
     now=time.perf_counter()
-    error = measurement-self.setpoint
+    error = self.setpoint-measurement
     self.previous_error=error
     self.previous_time=now
-    #return
-    if self.gain==0:desired_pid_output=0
-    else: desired_pid_output=(voltage-self.offset)/self.gain
-    self.integral=(desired_pid_output-self.kp*error)
-    # if self.ki!=0: self.integral=(desired_pid_output-self.kp*error)/self.ki
-    # else:          self.integral=0
+    if gain==0:desired_pid_output=0
+    else: desired_pid_output=(current_voltage-offset)/gain
+    if self.ki!=0: self.integral=(desired_pid_output-self.kp*error)/self.ki
+    else:          self.integral=0
 
   def to_dict(self):
-    return {"kp"      :self.kp,
-            "kd"      :self.kd,
-            "ki"      :self.ki,
-            "setpoint":self.setpoint,
-            "integral":self.integral,
-            "vLow"    :self.vLow,           
-            "vHigh"   :self.vHigh,          
-            "gain"    :self.gain,           
-            "offset"  :self.offset}
+    return {"kp":self.kp, "kd":self.kd, "ki":self.ki, "setpoint":self.setpoint, "integral":self.integral}
 
 @dataclass
 class WavePort:
@@ -99,24 +52,22 @@ class WavePort:
   active_read     :bool     = False
   active_pid      :bool     = False
   pid             :PIDState = field(default_factory=PIDState)
+  vLow            :float    = -5
+  vHigh           :float    =  5
+  gain            :float    =  10
+  offset          :float    =  0
   latest_time     :float    = None
   latest_reading  :float    =  0
   latest_error    :float    =  0
   latest_output   :float    =  0
-  latest_voltage  :float    =  0
   last_config     :float    =  field(default_factory=time.time)
   def updateParams(self, **kwargs):
-    changed=False; changed_pid=False
+    changed=False
     for key, value in kwargs.items():
-      if key=='integral':print('not updating integral'); continue
-      if hasattr(self.pid, key): setattr(self.pid, key, value); changed_pid=True
+      if hasattr(self.pid, key): setattr(self.pid, key, value); changed=True
       elif hasattr(self, key): setattr(self, key, value); changed=True
       else: raise AttributeError(f"Unknown WavePort parameter: {key}")
-    if changed_pid: self.pid.sync(); self.reset()
-    if changed or changed_pid: self.last_config = time.time()
-
-  def reset(self):
-    self.pid.reset(measurement=self.latest_reading, voltage=self.latest_voltage)
+    if changed: self.last_config = time.time()
 
   def getParam(self, key):
     if hasattr(self.pid, key): return(getattr(self.pid, key))
@@ -125,34 +76,36 @@ class WavePort:
   def enablePID(self):
     if not self.active_read:
       print('must enable channel read before activating channel PID'); return(False)
-    # now = time.perf_counter(); if now-self.pid.previous_time>5: self.reset()
-    self.reset()
-    self.active_pid=True
+    # now = time.perf_counter(); if now-self.pid.previous_time>5: self.pid.reset()
+    self.pid.reset(measurement=self.latest_reading, current_voltage=self.latest_output, gain=self.gain, offset=self.offset); self.active_pid=True
     self.last_config=time.time()
     return(True)
   def disablePID(self): self.active_pid=False; self.last_config=time.time()
-  # def clamp(self, value):    return max(self.vLow, min(self.vHigh, value))
-  # def wavelength_to_voltage(self, pid_output): return(self.gain*pid_output+self.offset)
+  def clamp(self, value):    return max(self.vLow, min(self.vHigh, value))
+  def wavelength_to_voltage(self, pid_output): return(self.gain*pid_output+self.offset)
   def update_pid(self, measurement):
-    error, pid_output, pid_voltage = self.pid.update(measurement)
-    self.latest_error=error; self.latest_output=pid_output; self.latest_voltage=pid_voltage
-    return(error, pid_voltage)
+    error, pid_output = self.pid.update(measurement)
+    voltage=self.clamp(self.wavelength_to_voltage(pid_output))
+    return(error, voltage)
   def config_dict(self):
     cd={"channel"         :self.channel,        
         "active_read"     :self.active_read,    
         "active_pid"      :self.active_pid,     
         "pid"             :self.pid.to_dict(),            
+        "vLow"            :self.vLow,           
+        "vHigh"           :self.vHigh,          
+        "gain"            :self.gain,           
+        "offset"          :self.offset,
         "last_config"     :self.last_config,
         # "latest_reading"  :self.latest_reading, 
         # "latest_error"    :self.latest_error,   
-        "latest_voltage"   :self.latest_voltage}
+        "latest_output"   :self.latest_output}
     return(cd)
   def telemetry_dict(self):
     td={"latest_time"     :self.latest_time,
         "latest_reading"  :self.latest_reading, 
         "latest_error"    :self.latest_error,   
-        "latest_output"   :self.latest_output,
-        "latest_voltage"   :self.latest_voltage}
+        "latest_output"   :self.latest_output}
     return(td)
 
 class AppState:
@@ -395,7 +348,7 @@ class WavemeterSinglet(Device): #class for wavemeter without a fiber switcher
     
   def set_output_voltage(self, voltage, channel):
     '''applies PID voltage to appropriate output port'''
-    # print(f"this function should set {voltage}V as output of channel {channel}.")
+    print(f"this function should set {voltage}V as output of channel {channel}.")
     msg=f':SENS:PID:VOLT:DEF {voltage}\r\n'
     self.wavemeter.tn.write(msg.encode())
 
